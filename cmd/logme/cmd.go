@@ -18,6 +18,7 @@ func main() {
 	token := flag.String("token", "", "Access token")
 	sourcetype := flag.String("sourcetype", "_json", "Sourcetype of the event")
 	file := flag.String("file", "", "File path to be sent to Splunk HEC")
+	break_line := flag.Bool("bl", false, "Break line in the file content")
 	flag.Parse()
 
 	if *server == "" || *token == "" || *file == "" {
@@ -30,6 +31,27 @@ func main() {
 		gologger.Fatal().Msgf("Failed while read the file: %v\n", err)
 	}
 
+	var lines []string
+	client := &http.Client{}
+
+	if break_line == nil || *break_line {
+		lines = strings.Split(string(fileContent), "\n")
+
+		for _, line := range lines {
+			var buffer bytes.Buffer
+			buffer.WriteString(line + "\n")
+			var bufferBytes = buffer.Bytes()
+			if len(bufferBytes) > 1 {
+				sendToSplunk(client, server, token, sourcetype, buffer.Bytes())
+			}
+		}
+	} else {
+		sendToSplunk(client, server, token, sourcetype, fileContent)
+	}
+
+}
+
+func createPayload(server *string, fileContent []byte, sourcetype *string) []byte {
 	if strings.HasSuffix(*server, "/services/collector/event") {
 		payload := map[string]interface{}{
 			"event":      string(fileContent),
@@ -42,25 +64,27 @@ func main() {
 		fileContent = jsonPayload
 	}
 
-	// Enviando o arquivo para o Splunk
-	url := *server
-	req, err := http.NewRequest("POST", url, bytes.NewBuffer(fileContent))
+	return fileContent
+}
+
+func sendToSplunk(client *http.Client, server *string, token *string, sourcetype *string, fileContent []byte) {
+
+	fileContent = createPayload(server, fileContent, sourcetype)
+
+	req, err := http.NewRequest("POST", *server, bytes.NewBuffer(fileContent))
 	if err != nil {
 		gologger.Fatal().Msgf("Failed to create request: %s\n", err)
 	}
 
-	// Adicionando os headers necessários
 	req.Header.Set("Authorization", "Splunk "+*token)
 	req.Header.Set("Content-Type", "application/json")
 
-	client := &http.Client{}
 	resp, err := client.Do(req)
 	if err != nil {
 		gologger.Fatal().Msgf("Failed to send request: %s\n", err)
 	}
 	defer resp.Body.Close()
 
-	// Lendo a resposta
 	body, _ := io.ReadAll(resp.Body)
 	gologger.Info().Msgf("Server response: %s\n", string(body))
 }
