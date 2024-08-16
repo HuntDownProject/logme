@@ -13,7 +13,7 @@ endif
 
 all: build
 build:
-	$(GOBUILD) $(GOFLAGS) -ldflags '$(LDFLAGS)' -o "logme" cmd/logme/cmd.go
+	$(GOBUILD) $(GOFLAGS) -ldflags '$(LDFLAGS)' -o "logme" cmd/logme/logme.go
 test:
 	$(GOTEST) $(GOFLAGS) ./...
 tidy:
